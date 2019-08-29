@@ -1,0 +1,50 @@
+--- 
+- name: download the package 
+  get_url: url={{ percona_package }} dest={{ percona_dest }} 
+
+- name: install the package 
+  apt: deb={{ percona_dest }}/{{ percona_dpkg }}.deb
+  when: ansible_os_family == "Debian" 
+
+- name: update
+  apt: update_cache=yes 
+
+- name: Install the Percona XtraDB Cluster server package and qpress package
+  apt: name={{ item }} state=present 
+  with_items: 
+  - "{{ percona_xtradb_cluster }}"
+  -  qpress
+  -  python-pip
+
+- name: install mysql pkg
+  apt: name=python-pymysql state=latest
+
+- name: Login to MySQL and make some users with some permissions
+  mysql_user:
+    #login_user: "{{ xtradb_root_user }}"
+    #login_password: "{{ xtradb_root_password }}"
+    user: "{{ xtradb_sst_user }}"
+    password: "{{ xtradb_sst_pass }}"
+    priv: "*.*:grant,reload,lock tables,process,replication client"
+    state: present
+    login_unix_socket: "{{ xtradb_mysql_pass }}"
+
+- name: configure percona cluster in node1
+  template: src={{ xtradb_node1_config_file }}.node1.j2 dest={{ xtradb_config_path }} 
+  when: ("ansible_all_ipv4_addresses == {{ xtradb_node1_ip }}")
+
+- name: configure percona cluster in node2
+  template: src={{ xtradb_node2_config_file }}.node2.j2 dest={{ xtradb_config_path }}
+  when: ("ansible_all_ipv4_addresses == {{ xtradb_node2_ip }}")
+
+- name: Start the master node
+  command: /etc/init.d/mysql bootstrap-pxc
+  when: ansible_os_family == "Debian"
+
+- name: Start the master node
+  command: /etc/init.d/mysql start
+  when: ansible_os_family == "Debian"
+
+
+#- name: start the mysql
+#  service: name=mysql state=started
